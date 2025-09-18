@@ -12,6 +12,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 // KDE
 // Qt
 #include <QApplication>
+#include <QDBusConnection>
 #include <QScreen>
 // X11
 #include "x11info.h"
@@ -81,6 +82,12 @@ void X11Locker::initialize()
     for (auto *screen : screens) {
         connect(screen, &QScreen::geometryChanged, this, &X11Locker::updateGeo);
     }
+    QDBusConnection::sessionBus().connect(QStringLiteral("org.kde.kscreenlocker.greetapp"),
+                                          QStringLiteral("/org/kde/x11NotifyService"),
+                                          QStringLiteral("org.kde.kscreenlocker_greet"),
+                                          QStringLiteral("x11LockWindowShown"),
+                                          this,
+                                          SLOT(onX11Notify()));
 }
 
 void X11Locker::showLockWindow()
@@ -383,7 +390,6 @@ bool X11Locker::nativeEventFilter(const QByteArray &eventType, void *message, qi
             }
             if (xm->window == m_background->winId()) {
                 m_background->update();
-                Q_EMIT lockWindowShown();
                 ret = false;
             } else {
                 ret = true;
@@ -549,6 +555,11 @@ void X11Locker::addAllowedWindow(quint32 window)
     }
 }
 
+void X11Locker::onX11Notify()
+{
+    qCDebug(KSCREENLOCKER) << "x11LockWindowShown received";
+    Q_EMIT lockWindowShown();
+}
 }
 
 #include "moc_x11locker.cpp"

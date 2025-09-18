@@ -34,6 +34,7 @@ namespace ScreenLocker
 {
 class WallpaperIntegration;
 class ShellIntegration;
+class X11NotifyAdaptor;
 
 class UnlockApp : public QGuiApplication
 {
@@ -104,5 +105,6 @@ private:
 
     KPackage::Package m_wallpaperPackage;
     ShellIntegration *m_shellIntegration;
+    X11NotifyAdaptor *m_x11NotifyObject;
 };
 } // namespace

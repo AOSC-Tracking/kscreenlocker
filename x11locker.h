@@ -35,6 +35,7 @@ public:
 
 private Q_SLOTS:
     void updateGeo();
+    void onX11Notify();
 
 private:
     void initialize();

@@ -34,6 +34,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 // Qt
 #include <QAbstractNativeEventFilter>
 #include <QClipboard>
+#include <QDBusAbstractAdaptor>
 #include <QDBusConnection>
 #include <QKeyEvent>
 #include <QMimeData>
@@ -132,6 +133,20 @@ public:
     }
 };
 
+class X11NotifyAdaptor : public QDBusAbstractAdaptor
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.kde.kscreenlocker_greet")
+public:
+    X11NotifyAdaptor(QObject *parent)
+        : QDBusAbstractAdaptor(parent)
+    {
+        qCDebug(KSCREENLOCKER_GREET) << "new X11NotifyAdaptor";
+    };
+Q_SIGNALS:
+    void x11LockWindowShown();
+};
+
 // App
 UnlockApp::UnlockApp(int &argc, char **argv)
     : QGuiApplication(argc, argv)
@@ -217,6 +232,13 @@ void UnlockApp::initialize()
 
     connect(PowerManagement::instance(), &PowerManagement::canSuspendChanged, this, &UnlockApp::updateCanSuspend);
     connect(PowerManagement::instance(), &PowerManagement::canHibernateChanged, this, &UnlockApp::updateCanHibernate);
+
+    if (KWindowSystem::isPlatformX11()) {
+        m_x11NotifyObject = new X11NotifyAdaptor(this);
+        auto connection = QDBusConnection::sessionBus();
+        connection.registerService(QStringLiteral("org.kde.kscreenlocker.greetapp"));
+        connection.registerObject(QStringLiteral("/org/kde/x11NotifyService"), this);
+    }
 }
 
 QWindow *UnlockApp::getActiveScreen()
@@ -450,6 +472,11 @@ void UnlockApp::markViewsAsVisible(PlasmaQuick::QuickViewSharedEngine *view)
     showProperty.write(true);
     // random state update, actually rather required on init only
     QMetaObject::invokeMethod(this, "getFocus", Qt::QueuedConnection);
+
+    if (KWindowSystem::isPlatformX11()) {
+        Q_EMIT m_x11NotifyObject->x11LockWindowShown();
+        qCDebug(KSCREENLOCKER_GREET) << "x11LockWindowShown emitted";
+    }
 
     auto mime1 = new QMimeData;
     // Effectively we want to clear the clipboard
