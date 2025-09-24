@@ -291,7 +291,7 @@ PamAuthenticator::PamAuthenticator(const QString &service, const QString &user, 
 PamAuthenticator::~PamAuthenticator()
 {
     cancel();
-    m_thread.quit();
+    m_thread.terminate();
     m_thread.wait();
 }
 
