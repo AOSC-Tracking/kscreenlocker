@@ -9,6 +9,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
 #include <QElapsedTimer>
+#include <QProcess>
 #include <QProcessEnvironment>
 
 #include <KScreenLocker/kscreenlocker_export.h>
@@ -272,6 +273,21 @@ private Q_SLOTS:
      */
     void solidSuspend();
 
+    /**
+     * @brief Handles the end of m_lockProcess.
+     */
+    void handleProcessEnd(int exitCode, QProcess::ExitStatus exitStatus);
+
+    /**
+     * @brief Handles error of m_lockProcess.
+     */
+    void handleProcessError(QProcess::ProcessError error);
+
+    /**
+     * @brief Handles output of m_lockProcess.
+     */
+    void handleProcessOutput();
+
 private:
     /**
      * @brief Initializes the X11 environment for the KSldApp.
@@ -286,6 +302,13 @@ private:
      * @return True if the grab is successfully established, false otherwise.
      */
     bool establishGrab();
+
+    /**
+     * @brief Create the lock process.
+     *
+     * Creates the lock process and connect necessary signals. If there is old process, delete it.
+     */
+    void createLockProcess();
 
     /**
      * @brief Starts the lock process.
