@@ -223,78 +223,13 @@ void KSldApp::initialize()
         lock(EstablishLock::Delayed);
     });
 
-    m_lockProcess = new QProcess();
-    m_lockProcess->setProcessChannelMode(QProcess::ForwardedErrorChannel);
-    m_lockProcess->setReadChannel(QProcess::StandardOutput);
-    auto finishedSignal = static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished);
-    connect(m_lockProcess, &QProcess::readyRead, this, [this] {
-        const auto str = QString::fromLocal8Bit(m_lockProcess->readLine());
-        if (str == QStringLiteral("Unlocked\n")) {
-            lockProcessRequestedUnlock();
-        }
-    });
-    connect(m_lockProcess, finishedSignal, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
-        qCDebug(KSCREENLOCKER) << "Greeter process exitted with status:" << exitStatus << "exit code:" << exitCode;
-
-        if (s_lockProcessRequestedExit) {
-            qCDebug(KSCREENLOCKER) << "Lock process had requested exit; we already did the unlock process elsewhere";
-            return;
-        }
-
-        if (s_graceTimeKill) {
-            qCDebug(KSCREENLOCKER) << "screen locker killed due to grace time.";
-            s_graceTimeKill = false;
-            s_logindExit = false;
-            return;
-        }
-        const bool regularExit = !exitCode && exitStatus == QProcess::NormalExit;
-        if (regularExit || s_logindExit) {
-            // unlock process finished successfully - we can remove the lock grab
-
-            if (regularExit) {
-                qCDebug(KSCREENLOCKER) << "Unlocking now on regular exit.";
-            } else {
-                Q_ASSERT(s_logindExit);
-                qCDebug(KSCREENLOCKER) << "Unlocking anyway since forced through logind.";
-            }
-
-            s_graceTimeKill = false;
-            s_logindExit = false;
-            doUnlock();
-            return;
-        }
-
-        qCWarning(KSCREENLOCKER) << "Greeter process exit unregular. Restarting lock.";
-
-        m_greeterCrashedCounter++;
-        if (m_greeterCrashedCounter < 4) {
-            // Perhaps it crashed due to a graphics driver issue, force software rendering now
-            qCDebug(KSCREENLOCKER, "Trying to lock again with software rendering (%d/4).", m_greeterCrashedCounter);
-            setForceSoftwareRendering(true);
-            startLockProcess(EstablishLock::Immediate);
-        } else if (m_lockWindow) {
-            qCWarning(KSCREENLOCKER) << "Everything else failed. Need to put Greeter in emergency mode.";
-            m_lockWindow->emergencyShow();
-        } else {
-            qCCritical(KSCREENLOCKER) << "Greeter process exitted and we could in no way recover from that!";
-        }
-    });
-    connect(m_lockProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
-        if (error == QProcess::FailedToStart) {
-            qCDebug(KSCREENLOCKER) << "Greeter Process  failed to start. Trying to directly unlock again.";
-            doUnlock();
-            m_waylandServer->stop();
-            qCCritical(KSCREENLOCKER) << "Greeter Process not available";
-        } else {
-            qCWarning(KSCREENLOCKER) << "Greeter Process encountered an unhandled error:" << error << ". Detailed error:" << m_lockProcess->errorString();
-        }
-    });
     m_lockedTimer.invalidate();
     m_graceTimer->setSingleShot(true);
     connect(m_graceTimer, &QTimer::timeout, this, &KSldApp::endGraceTime);
     // create our D-Bus interface
     new Interface(this);
 
+    createLockProcess();
     // connect to logind
     m_logind = new LogindIntegration(this);
     connect(m_logind, &LogindIntegration::requestLock, this, [this]() {
@@ -380,6 +315,85 @@ void KSldApp::initialize()
     }
 }
 
+void KSldApp::createLockProcess()
+{
+    m_lockProcess = new QProcess();
+    m_lockProcess->setProcessChannelMode(QProcess::ForwardedErrorChannel);
+    m_lockProcess->setReadChannel(QProcess::StandardOutput);
+    auto finishedSignal = static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished);
+    connect(m_lockProcess, &QProcess::readyRead, this, &KSldApp::handleProcessOutput);
+    connect(m_lockProcess, finishedSignal, this, &KSldApp::handleProcessEnd);
+    connect(m_lockProcess, &QProcess::errorOccurred, this, &KSldApp::handleProcessError);
+}
+
+void KSldApp::handleProcessEnd(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    qCDebug(KSCREENLOCKER) << "Greeter process exitted with status:" << exitStatus << "exit code:" << exitCode;
+
+    if (s_lockProcessRequestedExit) {
+        qCDebug(KSCREENLOCKER) << "Lock process had requested exit; we already did the unlock process elsewhere";
+        return;
+    }
+
+    if (s_graceTimeKill) {
+        qCDebug(KSCREENLOCKER) << "screen locker killed due to grace time.";
+        s_graceTimeKill = false;
+        s_logindExit = false;
+        return;
+    }
+    const bool regularExit = !exitCode && exitStatus == QProcess::NormalExit;
+    if (regularExit || s_logindExit) {
+        // unlock process finished successfully - we can remove the lock grab
+
+        if (regularExit) {
+            qCDebug(KSCREENLOCKER) << "Unlocking now on regular exit.";
+        } else {
+            Q_ASSERT(s_logindExit);
+            qCDebug(KSCREENLOCKER) << "Unlocking anyway since forced through logind.";
+        }
+
+        s_graceTimeKill = false;
+        s_logindExit = false;
+        doUnlock();
+        return;
+    }
+
+    qCWarning(KSCREENLOCKER) << "Greeter process exit unregular. Restarting lock.";
+
+    m_greeterCrashedCounter++;
+    if (m_greeterCrashedCounter < 4) {
+        // Perhaps it crashed due to a graphics driver issue, force software rendering now
+        qCDebug(KSCREENLOCKER, "Trying to lock again with software rendering (%d/4).", m_greeterCrashedCounter);
+        setForceSoftwareRendering(true);
+        startLockProcess(EstablishLock::Immediate);
+    } else if (m_lockWindow) {
+        qCWarning(KSCREENLOCKER) << "Everything else failed. Need to put Greeter in emergency mode.";
+        m_lockWindow->emergencyShow();
+    } else {
+        qCCritical(KSCREENLOCKER) << "Greeter process exitted and we could in no way recover from that!";
+    }
+}
+
+void KSldApp::handleProcessError(QProcess::ProcessError error)
+{
+    if (error == QProcess::FailedToStart) {
+        qCDebug(KSCREENLOCKER) << "Greeter Process  failed to start. Trying to directly unlock again.";
+        doUnlock();
+        m_waylandServer->stop();
+        qCCritical(KSCREENLOCKER) << "Greeter Process not available";
+    } else {
+        qCWarning(KSCREENLOCKER) << "Greeter Process encountered an unhandled error:" << error << ". Detailed error:" << m_lockProcess->errorString();
+    }
+}
+
+void KSldApp::handleProcessOutput()
+{
+    const auto str = QString::fromLocal8Bit(m_lockProcess->readLine());
+    if (str == QStringLiteral("Unlocked\n")) {
+        lockProcessRequestedUnlock();
+    }
+}
+
 void KSldApp::lockProcessRequestedUnlock()
 {
     qCDebug(KSCREENLOCKER) << "Lock process requested unlock";
@@ -428,6 +442,16 @@ void KSldApp::lock(EstablishLock establishLock, int attemptCount)
             kill(m_lockProcess->processId(), SIGUSR1);
         }
         return;
+    }
+
+    if (m_lockProcess->state() == QProcess::Running) {
+        qCDebug(KSCREENLOCKER) << "previous lock process has not finished yet, create a new one";
+        auto finishedSignal = static_cast<void (QProcess::*)(int, QProcess::ExitStatus)>(&QProcess::finished);
+        disconnect(m_lockProcess, &QProcess::readyRead, this, &KSldApp::handleProcessOutput);
+        disconnect(m_lockProcess, finishedSignal, this, &KSldApp::handleProcessEnd);
+        disconnect(m_lockProcess, &QProcess::errorOccurred, this, &KSldApp::handleProcessError);
+        connect(m_lockProcess, finishedSignal, m_lockProcess, &QObject::deleteLater);
+        createLockProcess();
     }
 
     if (attemptCount == 0) {
