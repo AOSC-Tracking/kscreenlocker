@@ -83,7 +83,6 @@ private:
     PamAuthenticators *m_authenticators;
     int m_graceTime;
     bool m_noLock;
-
     QString m_userName, m_userImage;
 
     KPackage::Package m_wallpaperPackage;
