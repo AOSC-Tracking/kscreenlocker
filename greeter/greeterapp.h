@@ -86,6 +86,7 @@ private:
     PamAuthenticators *m_authenticators;
     int m_graceTime;
     bool m_noLock;
+    bool m_ksldDelayAddWindow;
 
     QString m_userName, m_userImage;
 

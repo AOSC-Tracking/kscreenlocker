@@ -132,6 +132,7 @@ UnlockApp::UnlockApp(int &argc, char **argv)
     , m_immediateLock(false)
     , m_graceTime(0)
     , m_noLock(false)
+    , m_ksldDelayAddWindow(false)
     , m_shellIntegration(new ShellIntegration(this))
     , m_logindIntegration(new LogindIntegration(this))
 {
@@ -319,12 +320,6 @@ PlasmaQuick::QuickViewSharedEngine *UnlockApp::createViewForScreen(QScreen *scre
         }
     }
 
-    if (m_ksldInterface) {
-        view->create();
-        org_kde_ksld_x11window(m_ksldInterface, view->winId());
-        wl_display_flush(m_display);
-    }
-
     // engine stuff
     QQmlContext *context = view->engine()->rootContext();
     connect(view->engine().get(), &QQmlEngine::quit, this, [this]() {
@@ -433,6 +428,12 @@ PlasmaQuick::QuickViewSharedEngine *UnlockApp::createViewForScreen(QScreen *scre
 
     auto onFrameSwapped = [this, view] {
         markViewsAsVisible(view);
+        if (m_ksldInterface) {
+            org_kde_ksld_x11window(m_ksldInterface, view->winId());
+            wl_display_flush(m_display);
+        } else {
+            m_ksldDelayAddWindow = true;
+        }
     };
     connect(view, &QQuickWindow::frameSwapped, this, onFrameSwapped, static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::SingleShotConnection));
 
@@ -634,9 +635,11 @@ void UnlockApp::setKsldSocket(int socket)
         auto self = static_cast<UnlockApp *>(data);
         // bind version 1 as we dropped all the V2 features
         self->m_ksldInterface = static_cast<org_kde_ksld *>(wl_registry_bind(registry, name, &org_kde_ksld_interface, 1));
-        for (auto v : std::as_const(self->m_views)) {
-            org_kde_ksld_x11window(self->m_ksldInterface, v->winId());
-            wl_display_flush(self->m_display);
+        if (self->m_ksldDelayAddWindow) {
+            for (auto v : std::as_const(self->m_views)) {
+                org_kde_ksld_x11window(self->m_ksldInterface, v->winId());
+                wl_display_flush(self->m_display);
+            }
         }
     };
     auto noopGlobalRemove = [](void *, struct wl_registry *, uint32_t) {};
