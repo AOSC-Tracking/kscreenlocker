@@ -62,6 +62,7 @@ Q_SIGNALS:
     void prompt(const QString &msg);
     void infoMessage(const QString &msg);
     void errorMessage(const QString &msg);
+    void cancelled();
     void succeeded();
     void failed();
     void availableChanged();

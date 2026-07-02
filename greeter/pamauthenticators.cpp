@@ -47,6 +47,11 @@ PamAuthenticators::PamAuthenticators(std::unique_ptr<PamAuthenticator> &&interac
         qCDebug(KSCREENLOCKER_GREET) << "PamAuthenticators: Success from interactive authenticator" << qUtf8Printable(d->interactive->service());
         Q_EMIT succeeded();
     });
+    connect(d->interactive.get(), &PamAuthenticator::cancelled, this, [this] {
+        qCDebug(KSCREENLOCKER_GREET) << "PamAuthenticators: Interactive authenticator was cancelled" << qUtf8Printable(d->interactive->service());
+        setState(AuthenticatorsState::Idle);
+        Q_EMIT cancelled();
+    });
     connect(d->interactive.get(), &PamAuthenticator::failed, this, [this] {
         qCDebug(KSCREENLOCKER_GREET) << "PamAuthenticators: Failure from interactive authenticator" << qUtf8Printable(d->interactive->service());
         setState(AuthenticatorsState::Idle);
@@ -209,6 +214,7 @@ void PamAuthenticators::respond(const QByteArray &response)
 void PamAuthenticators::cancel()
 {
     qCDebug(KSCREENLOCKER_GREET) << "PamAuthenticators: cancelling interactive authenticator";
+    d->cancelNoninteractive();
     d->interactive->cancel();
 }
 

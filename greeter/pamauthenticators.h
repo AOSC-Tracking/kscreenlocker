@@ -70,6 +70,7 @@ public:
     // this property is true if any of the authenticators' unlocked properties are true
     bool isUnlocked() const;
     Q_SIGNAL void succeeded();
+    Q_SIGNAL void cancelled();
 
     PamAuthenticator::NoninteractiveAuthenticatorTypes authenticatorTypes() const;
     Q_SIGNAL void authenticatorTypesChanged();

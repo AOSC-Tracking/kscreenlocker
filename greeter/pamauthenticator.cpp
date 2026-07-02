@@ -51,6 +51,7 @@ Q_SIGNALS:
     void prompt(const QString &msg);
     void infoMessage(const QString &msg);
     void errorMessage(const QString &msg);
+    void cancelledCompleted();
     void failed();
     void loginFailedDelayStarted(const uint uSecDelay);
     void succeeded();
@@ -211,6 +212,8 @@ void PamWorker::authenticate()
         pam_setcred(m_handle, PAM_REFRESH_CRED);
         /* ignore errors on refresh credentials. If this did not work we use the old ones. */
         Q_EMIT succeeded();
+    } else if (m_cancelled) {
+        Q_EMIT cancelledCompleted();
     } else if (rc == PAM_AUTHINFO_UNAVAIL || rc == PAM_MODULE_UNKNOWN) {
         m_unavailable = true;
         Q_EMIT unavailabilityChanged(m_unavailable);
@@ -224,6 +227,9 @@ void PamWorker::authenticate()
 
 void PamWorker::startFailedDelay(uint useconds)
 {
+    if (m_cancelled) {
+        return;
+    }
     m_nextAttemptAllowedTime = std::chrono::steady_clock::now() + std::chrono::microseconds(useconds);
     Q_EMIT loginFailedDelayStarted(useconds);
 }
@@ -316,6 +322,7 @@ PamAuthenticator::PamAuthenticator(const QString &service, const QString &user, 
         m_unlocked = true;
         Q_EMIT succeeded();
     });
+    connect(d, &PamWorker::cancelledCompleted, this, &PamAuthenticator::cancelled);
     // Failed is not a persistent state. When a view provides authentication that will either result in failure or success,
     // failure simply means that the prompt is getting delayed.
     connect(d, &PamWorker::failed, this, &PamAuthenticator::failed);
