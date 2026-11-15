@@ -22,6 +22,7 @@ class PowerManagementInhibition;
 
 namespace ScreenLocker
 {
+class AbstractLocker;
 
 /**
  * Enum for the different ways to establish a lock.
@@ -273,6 +274,20 @@ private Q_SLOTS:
 
 private:
     /**
+     * @brief Initializes the X11 environment for the KSldApp.
+     */
+    void initializeX11();
+
+    /**
+     * @brief Establishes the grab for keyboard and mouse input.
+     *
+     * Ensures that only the lock window receives keyboard and mouse input.
+     *
+     * @return True if the grab is successfully established, false otherwise.
+     */
+    bool establishGrab();
+
+    /**
      * @brief Starts the lock process.
      *
      * This function starts the lock process based on the given EstablishLock parameter.
@@ -302,6 +317,9 @@ private:
 
     void updateIdleTimeout();
 
+    void showLockWindow();
+    void hideLockWindow();
+
     /**
      * @brief The current state of the lock.
      */
@@ -316,6 +334,8 @@ private:
      * The lock window used to display the "The screen locker is broken" message
      **/
     std::unique_ptr<EmergencyWindow> m_emergencyLockWindow;
+
+    AbstractLocker *m_lockWindow = nullptr;
 
     /**
      * Timer to measure how long the screen is locked.
@@ -363,9 +383,24 @@ private:
     GlobalAccel *m_globalAccel = nullptr;
 
     /**
+     * @brief Whether the XInput2 extension is available.
+     */
+    bool m_hasXInput2 = false;
+
+    /**
      * @brief Whether software rendering should be forced.
      */
     bool m_forceSoftwareRendering = false;
+
+    /**
+     * @brief Whether the application is running on X11.
+     */
+    bool m_isX11;
+
+    /**
+     * @brief Whether the application is running on Wayland.
+     */
+    bool m_isWayland;
 
     /**
      * @brief Counter for tracking the number of times the greeter has crashed.

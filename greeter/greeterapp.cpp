@@ -55,6 +55,13 @@ SPDX-License-Identifier: GPL-2.0-or-later
 #include <QQuickItem>
 #include <QQuickView>
 
+// X11
+#include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <fixx11h.h>
+#include <xcb/xcb.h>
+#include <xcb/xcb_event.h>
+
 #include "pamauthenticator.h"
 #include "pamauthenticators.h"
 
@@ -153,6 +160,20 @@ void ActiveScreenMonitor::onScreenChange(QQuickView *view)
     }
 }
 
+class FocusOutEventFilter : public QAbstractNativeEventFilter
+{
+public:
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override
+    {
+        Q_UNUSED(result)
+        if (eventType != QByteArrayLiteral("xcb_generic_event_t")) {
+            return false;
+        }
+        auto event = static_cast<xcb_generic_event_t *>(message);
+        return XCB_EVENT_RESPONSE_TYPE(event) == XCB_FOCUS_OUT;
+    }
+};
+
 // App
 UnlockApp::UnlockApp(int &argc, char **argv)
     : QGuiApplication(argc, argv)
@@ -173,6 +194,14 @@ UnlockApp::UnlockApp(int &argc, char **argv)
     state->init(this);
 
     initialize();
+
+    if (KWindowSystem::isPlatformX11()) {
+        installNativeEventFilter(new FocusOutEventFilter);
+    }
+
+    if (KWindowSystem::isPlatformX11()) {
+        installNativeEventFilter(new FocusOutEventFilter);
+    }
 }
 
 UnlockApp::~UnlockApp()
@@ -308,7 +337,11 @@ QQuickView *UnlockApp::createViewForScreen(QScreen *screen)
     view->engine()->setNetworkAccessManagerFactory(new NoAccessNetworkAccessManagerFactory);
 
     if (!m_testing) {
-        view->setFlags(Qt::FramelessWindowHint);
+        if (KWindowSystem::isPlatformX11()) {
+            view->setFlags(Qt::X11BypassWindowManagerHint);
+        } else {
+            view->setFlags(Qt::FramelessWindowHint);
+        }
     }
 
     // engine stuff
@@ -533,6 +566,29 @@ void UnlockApp::lockImmediately()
 
 bool UnlockApp::eventFilter(QObject *obj, QEvent *event)
 {
+    if (obj != this && event->type() == QEvent::Show) {
+        QQuickView *view = nullptr;
+        for (QQuickView *candidate : std::as_const(m_views)) {
+            if (candidate == obj) {
+                view = candidate;
+                break;
+            }
+        }
+        if (view && view->winId() && KWindowSystem::isPlatformX11()) {
+            auto x11App = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+            static Atom tag = XInternAtom(x11App->display(), "_KDE_SCREEN_LOCKER", False);
+            XChangeProperty(x11App->display(), view->winId(), tag, tag, 32, PropModeReplace, nullptr, 0);
+        }
+        return false;
+    }
+
+    if (event->type() == QEvent::MouseButtonPress && KWindowSystem::isPlatformX11()) {
+        if (getActiveScreen()) {
+            getActiveScreen()->requestActivate();
+        }
+        return false;
+    }
+
     if (event->type() == QEvent::Enter) {
         if (m_views.contains(obj)) {
             Q_EMIT viewEntered(qobject_cast<QQuickView *>(obj));

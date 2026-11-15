@@ -48,6 +48,16 @@ find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
 
 find_package(PlasmaQuick ${PROJECT_DEP_VERSION} REQUIRED)
 
+find_package(X11)
+set_package_properties(X11 PROPERTIES DESCRIPTION "X11 libraries"
+                        URL "https://www.x.org"
+                        TYPE REQUIRED
+                        PURPOSE "Required for building the X11 based workspace")
+
+find_package(XCB MODULE REQUIRED COMPONENTS XCB KEYSYMS UTIL XTEST)
+set_package_properties(XCB PROPERTIES TYPE REQUIRED)
+add_feature_info("XInput" X11_Xinput_FOUND "Required for grabbing XInput2 devices in the screen locker")
+
 find_package(LayerShellQt REQUIRED)
 find_package(KF6Screen REQUIRED)
 
@@ -130,10 +140,14 @@ set(kscreensaver_dbusXML dbus/org.kde.screensaver.xml)
 set(powerdevilpolicyagent_xml dbus/kf6_org.kde.Solid.PowerManagement.PolicyAgent.xml)
 
 set(ksld_SRCS
+   abstractlocker.cpp
+   abstractlocker.h
    emergencywindow.cpp
    globalaccel.cpp
    interface.cpp
    ksldapp.cpp
+   x11locker.cpp
+   x11locker.h
    logind.cpp
    powermanagement_inhibition.cpp
    emergencywindow.h
@@ -172,6 +186,9 @@ PRIVATE
    KF6::ConfigGui
    KF6::Package
    KF6::WindowSystem
+   X11::X11
+   XCB::XCB
+   XCB::KEYSYMS
 )
 
 set(kscreenlocker_greet_bin_abs ${CMAKE_INSTALL_FULL_LIBEXECDIR}/kscreenlocker_greet)
@@ -181,6 +198,10 @@ target_compile_definitions(KScreenLocker PRIVATE
     KSCREENLOCKER_GREET_BIN_ABS="${kscreenlocker_greet_bin_abs}"
     KSCREENLOCKER_GREET_BIN_REL="${kscreenlocker_greet_bin_rel}"
 )
+
+if (X11_Xinput_FOUND)
+    target_link_libraries(KScreenLocker PRIVATE X11::Xi)
+endif()
 
 target_include_directories(KScreenLocker INTERFACE "$<INSTALL_INTERFACE:${KSLD_INCLUDEDIR}>")
 

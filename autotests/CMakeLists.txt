@@ -34,3 +34,44 @@ set(ksmserver-pamTest-environment
 )
 set_tests_properties(ksmserver-pamTest PROPERTIES ENVIRONMENT "${ksmserver-pamTest-environment}")
 ecm_mark_as_test(pamTest)
+#######################################
+# KeyboardGrabber
+#######################################
+add_executable(keyboardGrabber keyboardgrabber.cpp)
+target_link_libraries(keyboardGrabber Qt::Core XCB::XCB)
+ecm_mark_as_test(keyboardGrabber)
+
+#######################################
+# PointerGrabber
+#######################################
+add_executable(pointerGrabber pointergrabber.cpp)
+target_link_libraries(pointerGrabber Qt::Core XCB::XCB)
+ecm_mark_as_test(pointerGrabber)
+
+#######################################
+# LockWindowTest
+#######################################
+set(x11LockerTest_SRCS
+    x11lockertest.cpp
+    ../x11locker.cpp
+    ../globalaccel.cpp
+    ../abstractlocker.cpp
+    ../kscreenlocker_logging.cpp
+)
+
+add_executable(x11LockerTest ${x11LockerTest_SRCS})
+target_link_libraries(x11LockerTest
+    KF6::GlobalAccel
+    KF6::I18n
+    KF6::WindowSystem
+    Qt::Test
+    Qt::Widgets
+    X11::X11
+    XCB::XCB
+    XCB::KEYSYMS
+)
+
+target_link_libraries(x11LockerTest Qt::GuiPrivate)
+
+add_test(NAME ksmserver-x11LockerTest COMMAND x11LockerTest)
+ecm_mark_as_test(x11LockerTest)
